@@ -1,8 +1,14 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/a-h/templ"
 
 	"todo-app/components"
 )
@@ -26,6 +32,85 @@ func TestTodoStoreAdd(t *testing.T) {
 	}
 	if got := store.GetAll(); !reflect.DeepEqual(got, wantAll) {
 		t.Fatalf("GetAll() = %+v, want %+v", got, wantAll)
+	}
+}
+
+func TestTodoStoreAddTrimsWhitespace(t *testing.T) {
+	store := NewTodoStore()
+
+	got := store.Add("  hello  ")
+	want := components.Todo{ID: 1, Text: "hello", Completed: false}
+	if got != want {
+		t.Fatalf("Add trims surrounding whitespace: got %+v, want %+v", got, want)
+	}
+
+	if gotAll := store.GetAll(); !reflect.DeepEqual(gotAll, []components.Todo{want}) {
+		t.Fatalf("GetAll() = %+v, want %+v", gotAll, []components.Todo{want})
+	}
+}
+
+func TestTodoStoreAddRejectsBlankText(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{name: "empty string", input: ""},
+		{name: "whitespace only", input: "   \t\n  "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := NewTodoStore()
+			store.Add(tt.input)
+
+			if got := store.GetAll(); len(got) != 0 {
+				t.Fatalf("Add(%q) created todos %+v, want no todos", tt.input, got)
+			}
+
+			got := store.Add("next")
+			want := components.Todo{ID: 1, Text: "next", Completed: false}
+			if got != want {
+				t.Fatalf("Add after rejecting blank text = %+v, want %+v", got, want)
+			}
+		})
+	}
+}
+
+func TestTodosHandlerRejectsWhitespaceOnlyText(t *testing.T) {
+	previousStore := store
+	store = NewTodoStore()
+	defer func() { store = previousStore }()
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		text := r.FormValue("text")
+		if text == "" {
+			http.Error(w, "Todo text is required", http.StatusBadRequest)
+			return
+		}
+
+		todo := store.Add(text)
+		component := components.TodoItem(todo)
+		templ.Handler(component).ServeHTTP(w, r)
+	})
+
+	form := url.Values{"text": {"   "}}
+	req := httptest.NewRequest(http.MethodPost, "/todos", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("POST /todos with whitespace-only text status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	if got := store.GetAll(); len(got) != 0 {
+		t.Fatalf("POST /todos with whitespace-only text created todos %+v, want no todos", got)
 	}
 }
 
