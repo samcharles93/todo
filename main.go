@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/a-h/templ"
@@ -29,6 +30,11 @@ func NewTodoStore() *TodoStore {
 
 // Add adds a new todo to the store
 func (s *TodoStore) Add(text string) components.Todo {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return components.Todo{}
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -104,7 +110,7 @@ func main() {
 			return
 		}
 
-		text := r.FormValue("text")
+		text := strings.TrimSpace(r.FormValue("text"))
 		if text == "" {
 			http.Error(w, "Todo text is required", http.StatusBadRequest)
 			return
