@@ -1,6 +1,12 @@
 package components
 
-templ Page(todos []Todo) {
+templ RemainingCount(remainingText string) {
+	<div id="remaining-count" class="mt-4 text-sm text-gray-500" hx-swap-oob="true">
+		{ remainingText }
+	</div>
+}
+
+templ Page(todos []Todo, remainingText string) {
 	<!DOCTYPE html>
 	<html lang="en">
 	<head>
@@ -30,6 +36,7 @@ templ Page(todos []Todo) {
 						</div>
 					}
 				</div>
+				@RemainingCount(remainingText)
 			</main>
 		</div>
 	</body>

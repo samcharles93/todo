@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"net/http"
@@ -82,6 +83,34 @@ func (s *TodoStore) GetAll() []components.Todo {
 
 var store = NewTodoStore()
 
+func countRemainingTodos(todos []components.Todo) int {
+	remaining := 0
+	for _, todo := range todos {
+		if !todo.Completed {
+			remaining++
+		}
+	}
+	return remaining
+}
+
+func remainingCountText(remaining int) string {
+	if remaining == 1 {
+		return "1 item left"
+	}
+	return fmt.Sprintf("%d items left", remaining)
+}
+
+func renderComponents(w http.ResponseWriter, r *http.Request, rendered ...templ.Component) {
+	var buf bytes.Buffer
+	for _, component := range rendered {
+		if err := component.Render(r.Context(), &buf); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	_, _ = w.Write(buf.Bytes())
+}
+
 func main() {
 	// Serve static files
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("public"))))
@@ -93,7 +122,7 @@ func main() {
 			return
 		}
 		todos := store.GetAll()
-		component := components.Page(todos)
+		component := components.Page(todos, remainingCountText(countRemainingTodos(todos)))
 		templ.Handler(component).ServeHTTP(w, r)
 	})
 
@@ -111,8 +140,11 @@ func main() {
 		}
 
 		todo := store.Add(text)
-		component := components.TodoItem(todo)
-		templ.Handler(component).ServeHTTP(w, r)
+		todos := store.GetAll()
+		renderComponents(w, r,
+			components.TodoItem(todo),
+			components.RemainingCount(remainingCountText(countRemainingTodos(todos))),
+		)
 	})
 
 	// Toggle todo
@@ -137,8 +169,11 @@ func main() {
 
 		// For HTMX requests, return just the updated component
 		if r.Header.Get("Hx-Request") == "true" {
-			component := components.TodoItem(*todo)
-			templ.Handler(component).ServeHTTP(w, r)
+			todos := store.GetAll()
+			renderComponents(w, r,
+				components.TodoItem(*todo),
+				components.RemainingCount(remainingCountText(countRemainingTodos(todos))),
+			)
 		} else {
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 		}
@@ -165,9 +200,11 @@ func main() {
 			return
 		}
 
-		// For HTMX requests, return a fragment to swap (delete the element)
-		// We use an empty response for deletion with hx-swap="outerHTML"
-		w.WriteHeader(http.StatusOK)
+		todos := store.GetAll()
+		renderComponents(w, r,
+			templ.Raw(""),
+			components.RemainingCount(remainingCountText(countRemainingTodos(todos))),
+		)
 	})
 
 	fmt.Println("Todo List Server starting on http://localhost:8080")
