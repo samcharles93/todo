@@ -1,0 +1,41 @@
+version: '3'
+
+tasks:
+  default:
+    desc: List all available tasks
+    cmds:
+      - task --list-all
+
+  install:
+    desc: Install templ CLI tool
+    cmds:
+      - go install github.com/a-h/templ/cmd/templ@latest
+
+  generate:
+    desc: Generate Go code from .templ files
+    cmds:
+      - templ generate ./components/
+
+  tidy:
+    desc: Tidy Go modules
+    cmds:
+      - go mod tidy
+
+  build:
+    desc: Build the application
+    deps: [generate, tidy]
+    cmds:
+      - go build -o bin/todos .
+
+  run:
+    desc: Run the application
+    deps: [build]
+    cmds:
+      - ./bin/todos
+
+  dev:
+    desc: Run templ generate in watch mode alongside the server
+    cmds:
+      - templ generate -w -path=./components/ &
+      - sleep 2
+      - go run .

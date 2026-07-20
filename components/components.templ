@@ -1,0 +1,37 @@
+package components
+
+templ Page(todos []Todo) {
+	<!DOCTYPE html>
+	<html lang="en">
+	<head>
+		<meta charset="UTF-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+		<title>Todo List</title>
+		<!-- HTMX for interactivity -->
+		<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+		<!-- Tailwind CSS for styling -->
+		<script src="https://cdn.tailwindcss.com"></script>
+	</head>
+	<body class="bg-gray-100 min-h-screen py-8">
+		<div class="max-w-2xl mx-auto px-4">
+			<header class="mb-8">
+				<h1 class="text-3xl font-bold text-gray-800 text-center">Todo List</h1>
+				<p class="text-gray-500 text-center mt-2">Built with Go, Templ & HTMX</p>
+			</header>
+			<main>
+				@TodoForm()
+				<div id="todo-list">
+					for _, todo := range todos {
+						@TodoItem(todo)
+					}
+					if len(todos) == 0 {
+						<div class="text-center py-8 text-gray-500">
+							<p>No todos yet. Add one above!</p>
+						</div>
+					}
+				</div>
+			</main>
+		</div>
+	</body>
+	</html>
+}
