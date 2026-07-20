@@ -1,8 +1,13 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/a-h/templ"
 
 	"todo-app/components"
 )
@@ -154,6 +159,110 @@ func TestTodoStoreGetAllInsertionOrder(t *testing.T) {
 
 	if gotAgain := store.GetAll(); !reflect.DeepEqual(gotAgain, want) {
 		t.Fatalf("GetAll() after mutating returned slice = %+v, want %+v", gotAgain, want)
+	}
+}
+
+func TestCountRemainingTodos(t *testing.T) {
+	tests := []struct {
+		name  string
+		todos []components.Todo
+		want  int
+	}{
+		{
+			name:  "zero todos",
+			todos: nil,
+			want:  0,
+		},
+		{
+			name: "mixed completed and incomplete",
+			todos: []components.Todo{
+				{ID: 1, Text: "first", Completed: false},
+				{ID: 2, Text: "second", Completed: true},
+				{ID: 3, Text: "third", Completed: false},
+			},
+			want: 2,
+		},
+		{
+			name: "all completed",
+			todos: []components.Todo{
+				{ID: 1, Text: "first", Completed: true},
+				{ID: 2, Text: "second", Completed: true},
+			},
+			want: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := countRemainingTodos(tt.todos); got != tt.want {
+				t.Fatalf("countRemainingTodos() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRemainingCountText(t *testing.T) {
+	tests := []struct {
+		remaining int
+		want      string
+	}{
+		{remaining: 0, want: "0 items left"},
+		{remaining: 1, want: "1 item left"},
+		{remaining: 2, want: "2 items left"},
+	}
+
+	for _, tt := range tests {
+		if got := remainingCountText(tt.remaining); got != tt.want {
+			t.Fatalf("remainingCountText(%d) = %q, want %q", tt.remaining, got, tt.want)
+		}
+	}
+}
+
+func TestRenderComponents(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	renderComponents(rec, req,
+		components.TodoItem(components.Todo{ID: 1, Text: "first", Completed: false}),
+		components.RemainingCount("1 item left"),
+	)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "first") {
+		t.Fatalf("renderComponents() body %q does not contain todo item text", body)
+	}
+	if !strings.Contains(body, "remaining-count") || !strings.Contains(body, "1 item left") {
+		t.Fatalf("renderComponents() body %q does not contain remaining count fragment", body)
+	}
+}
+
+func TestDeleteTodoHTMXResponseIncludesRemainingCount(t *testing.T) {
+	store := NewTodoStore()
+	store.Add("first")
+	second := store.Add("second")
+	store.Toggle(second.ID)
+
+	req := httptest.NewRequest(http.MethodDelete, "/todos/1", nil)
+	rec := httptest.NewRecorder()
+
+	http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !store.Delete(1) {
+			http.NotFound(w, r)
+			return
+		}
+		todos := store.GetAll()
+		renderComponents(w, r,
+			templ.Raw(""),
+			components.RemainingCount(remainingCountText(countRemainingTodos(todos))),
+		)
+	}).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "remaining-count") || !strings.Contains(body, "0 items left") {
+		t.Fatalf("delete response body %q missing remaining count fragment", body)
 	}
 }
 
