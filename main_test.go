@@ -87,7 +87,7 @@ func TestTodosHandlerRejectsWhitespaceOnlyText(t *testing.T) {
 			return
 		}
 
-		text := r.FormValue("text")
+		text := strings.TrimSpace(r.FormValue("text"))
 		if text == "" {
 			http.Error(w, "Todo text is required", http.StatusBadRequest)
 			return
